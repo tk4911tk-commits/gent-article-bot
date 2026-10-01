@@ -25,7 +25,7 @@ jobs:
         env:
           LINE_CHANNEL_SECRET: ${{ secrets.LINE_CHANNEL_SECRET }}
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
-          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+         
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: node src/weekly-topic-generator.js
 

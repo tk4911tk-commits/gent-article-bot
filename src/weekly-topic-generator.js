@@ -24,7 +24,7 @@ async function generateTopicPool() {
 - 既存の3つの文体パターン（運営者風・舞香風・百足風）を参考に
 - 新ジャンル「性（キス・SEXなど）」は運営者風で提案
 - 各トピックに簡潔な構成骨子も含める
-- JSON形式で返す（LINEメッセージ整形用）
+- 必ずJSON形式のみで返答してください。JSON以外の説明文、前置き、後書きは一切含めないでください。
 
 【学習教材】
 ${learningArticles}`;
@@ -41,7 +41,7 @@ ${learningArticles}`;
   * 短い説明
 
 【出力形式】
-JSON形式で、以下の構造で返してください：
+以下のJSON構造のみを出力してください。説明文は不要です：
 {
   "week": "2024-XX-XX",
   "topics": [
@@ -80,7 +80,6 @@ JSON形式で、以下の構造で返してください：
     );
 
     // Claude の応答から「本文（text）」ブロックを探す
-    // （thinkingブロックなど、text以外が先頭に来ることがあるため）
     const textBlock = response.data.content.find(block => block.type === 'text');
 
     if (!textBlock || !textBlock.text) {
@@ -89,6 +88,12 @@ JSON形式で、以下の構造で返してください：
     }
 
     const content = textBlock.text;
+
+    // デバッグ用：実際にClaudeが返した内容を全部ログに出す
+    console.log('--- Claude raw response start ---');
+    console.log(content);
+    console.log('--- Claude raw response end ---');
+
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       throw new Error('JSON not found in Claude response');
@@ -109,13 +114,11 @@ JSON形式で、以下の構造で返してください：
 function formatTopicsForLine(topicData) {
   const messages = [];
 
-  // ヘッダーメッセージ
   messages.push({
     type: 'text',
     text: `📌 今週のトピック池\n\n今週のおすすめ記事トピック ${topicData.topics.length} 本です。どれで執筆しますか？`
   });
 
-  // 各トピックをメッセージ化
   topicData.topics.forEach((topic, index) => {
     const outlineText = topic.outline.map((o, i) => `  ${i + 1}. ${o}`).join('\n');
     const message = `【${index + 1}】${topic.title}\n\n📂 ジャンル：${topic.genre}\n🎨 文体：${topic.style}\n\n📋 構成案：\n${outlineText}\n\n💡 ${topic.description}`;
@@ -126,7 +129,6 @@ function formatTopicsForLine(topicData) {
     });
   });
 
-  // 返信用フッター
   messages.push({
     type: 'text',
     text: `\n👉 「①で」「②で」など、番号で返信してください！`
@@ -158,7 +160,6 @@ async function sendToLine(messages) {
         }
       );
 
-      // LINE API のレート制限対策
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
@@ -173,29 +174,3 @@ async function sendToLine(messages) {
 async function main() {
   try {
     console.log('🚀 Starting weekly topic generation...');
-
-    // Step 1: トピック池を生成
-    console.log('📝 Generating topics with Claude...');
-    const topicData = await generateTopicPool();
-
-    // Step 2: LINE メッセージにフォーマット
-    console.log('📋 Formatting messages for LINE...');
-    const lineMessages = formatTopicsForLine(topicData);
-
-    // Step 3: LINE に送信
-    console.log('📤 Sending to LINE...');
-    await sendToLine(lineMessages);
-
-    // Step 4: ログを保存（後で確認用）
-    const logPath = path.join(process.cwd(), 'logs', `topic-pool-${new Date().toISOString().split('T')[0]}.json`);
-    fs.mkdirSync(path.dirname(logPath), { recursive: true });
-    fs.writeFileSync(logPath, JSON.stringify(topicData, null, 2));
-
-    console.log('✅ Completed successfully!');
-  } catch (error) {
-    console.error('❌ Error:', error.message);
-    process.exit(1);
-  }
-}
-
-main();

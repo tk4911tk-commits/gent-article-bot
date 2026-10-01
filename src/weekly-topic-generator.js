@@ -89,6 +89,10 @@ JSON形式で、以下の構造で返してください：
     return JSON.parse(jsonMatch[0]);
   } catch (error) {
     console.error('Claude API error:', error.message);
+    if (error.response) {
+      console.error('Status:', error.response.status);
+      console.error('Response data:', JSON.stringify(error.response.data, null, 2));
+    }
     throw error;
   }
 }

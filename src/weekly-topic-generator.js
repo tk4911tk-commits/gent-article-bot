@@ -61,7 +61,7 @@ JSON形式で、以下の構造で返してください：
       'https://api.anthropic.com/v1/messages',
       {
         model: 'claude-sonnet-5',
-        max_tokens: 1500,
+        max_tokens: 2000,
         system: systemPrompt,
         messages: [
           {
@@ -79,8 +79,16 @@ JSON形式で、以下の構造で返してください：
       }
     );
 
-    // Claude の応答から JSON を抽出
-    const content = response.data.content[0].text;
+    // Claude の応答から「本文（text）」ブロックを探す
+    // （thinkingブロックなど、text以外が先頭に来ることがあるため）
+    const textBlock = response.data.content.find(block => block.type === 'text');
+
+    if (!textBlock || !textBlock.text) {
+      console.error('Full response:', JSON.stringify(response.data, null, 2));
+      throw new Error('No text content found in Claude response');
+    }
+
+    const content = textBlock.text;
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       throw new Error('JSON not found in Claude response');

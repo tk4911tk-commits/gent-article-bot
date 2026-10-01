@@ -4,7 +4,6 @@ import path from 'path';
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const LINE_CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
-const LINE_USER_ID = process.env.LINE_USER_ID;
 
 function loadLearningArticles() {
   const articlesPath = path.join(process.cwd(), 'data', 'learning-articles.md');
@@ -145,13 +144,13 @@ function formatTopicsForLine(topicData) {
   return messages;
 }
 
+// ブロードキャスト配信：このBotの友だち全員に送信（個人用なので実質KOIさんだけに届く）
 async function sendToLine(messages) {
   try {
     for (const msg of messages) {
       await axios.post(
-        'https://api.line.me/v2/bot/message/push',
+        'https://api.line.me/v2/bot/message/broadcast',
         {
-          to: LINE_USER_ID,
           messages: [
             {
               type: 'text',
@@ -172,9 +171,12 @@ async function sendToLine(messages) {
       });
     }
 
-    console.log('✅ Sent ' + messages.length + ' messages to LINE');
+    console.log('✅ Sent ' + messages.length + ' messages to LINE (broadcast)');
   } catch (error) {
     console.error('LINE API error:', error.message);
+    if (error.response) {
+      console.error('LINE error details:', JSON.stringify(error.response.data, null, 2));
+    }
     throw error;
   }
 }

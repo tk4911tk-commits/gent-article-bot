@@ -1,0 +1,34 @@
+name: Weekly GENT Article Topic Bot
+
+on:
+  schedule:
+    # 毎週日曜夜20時（JST）= UTC 毎週日曜11時
+    - cron: '0 11 * * 0'
+  workflow_dispatch:  # 手動実行用
+
+jobs:
+  generate-and-send:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install axios dotenv
+
+      - name: Generate topics and send to LINE
+        env:
+          LINE_CHANNEL_SECRET: ${{ secrets.LINE_CHANNEL_SECRET }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: node src/weekly-topic-generator.js
+
+      - name: Log execution
+        run: echo "Weekly topic pool generated and sent to LINE"

@@ -149,7 +149,7 @@ async function sendToLine(messages) {
   try {
     for (const msg of messages) {
       await axios.post(
-        'https://api.line.biz/v2/bot/message/push',
+        'https://api.line.me/v2/bot/message/push',
         {
           to: LINE_USER_ID,
           messages: [

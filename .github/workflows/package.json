@@ -1,0 +1,26 @@
+{
+  "name": "gent-article-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "GENT記事量産の半自動化 - トピック提案とドラフト生成",
+  "main": "src/weekly-topic-generator.js",
+  "scripts": {
+    "generate-topics": "node src/weekly-topic-generator.js",
+    "test": "node src/weekly-topic-generator.js"
+  },
+  "keywords": [
+    "gent",
+    "line-bot",
+    "article-automation",
+    "coaching"
+  ],
+  "author": "KOI",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "dotenv": "^16.3.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

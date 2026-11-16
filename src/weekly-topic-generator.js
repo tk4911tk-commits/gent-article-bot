@@ -5,26 +5,99 @@ import path from 'path';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const LINE_CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
 
+const HISTORY_PATH = path.join(process.cwd(), 'data', 'topic-history.json');
+const HISTORY_KEEP_COUNT = 40; // 直近40件（だいたい10〜13週分）を保持
+
 function loadLearningArticles() {
   const articlesPath = path.join(process.cwd(), 'data', 'learning-articles.md');
   return fs.readFileSync(articlesPath, 'utf-8');
 }
 
+function loadTopicHistory() {
+  try {
+    if (!fs.existsSync(HISTORY_PATH)) {
+      return [];
+    }
+    const raw = fs.readFileSync(HISTORY_PATH, 'utf-8');
+    return JSON.parse(raw);
+  } catch (error) {
+    console.error('History load error (continuing with empty history):', error.message);
+    return [];
+  }
+}
+
+function saveTopicHistory(history, newTopics, weekLabel) {
+  const additions = newTopics.map(function (topic) {
+    return {
+      week: weekLabel,
+      title: topic.title,
+      genre: topic.genre,
+      style: topic.style
+    };
+  });
+
+  const merged = history.concat(additions);
+  const trimmed = merged.slice(Math.max(0, merged.length - HISTORY_KEEP_COUNT));
+
+  fs.mkdirSync(path.dirname(HISTORY_PATH), { recursive: true });
+  fs.writeFileSync(HISTORY_PATH, JSON.stringify(trimmed, null, 2));
+}
+
+function formatHistoryForPrompt(history) {
+  if (history.length === 0) {
+    return '（まだ過去の履歴はありません）';
+  }
+
+  // 直近15件だけプロンプトに含める（プロンプトが長くなりすぎないように）
+  const recent = history.slice(Math.max(0, history.length - 15));
+
+  return recent.map(function (item, index) {
+    return (index + 1) + '. 【' + item.genre + '／' + item.style + '】' + item.title;
+  }).join('\n');
+}
+
+function countGenreUsage(history) {
+  const counts = {};
+  history.forEach(function (item) {
+    counts[item.genre] = (counts[item.genre] || 0) + 1;
+  });
+  return counts;
+}
+
 async function generateTopicPool() {
   const learningArticles = loadLearningArticles();
+  const history = loadTopicHistory();
+  const historyText = formatHistoryForPrompt(history);
+  const genreCounts = countGenreUsage(history);
+  const genreCountsText = Object.keys(genreCounts).length > 0
+    ? Object.entries(genreCounts).map(function (entry) {
+        return entry[0] + '：' + entry[1] + '回';
+      }).join('、')
+    : '（まだ記録なし）';
 
   const systemPrompt = [
     'あなたはGENTの記事執筆アシスタントです。',
     '恋愛コーチング領域で、生徒さんが「なるほど！」と思える実践的なトピックを提案します。',
     '',
     '【重要な指示】',
-    '- トーン：営業コンサル視点（ビジネス理論×恋愛）',
-    '- 既存の3つの文体パターン（運営者風・舞香風・百足風）を参考に',
-    '- 新ジャンル「性（キス・SEXなど）」は運営者風で提案',
+    '- トーン：営業コンサル視点（ビジネス理論×恋愛）は使いすぎない。他の切り口（心理学、行動経済学、具体的エピソード、Q&A形式、データ・あるある統計形式など）も積極的に試す',
+    '- 既存の3つの文体パターン（運営者風・舞香風・百足風）を参考にしつつ、内容の切り口は毎回変える',
+    '- 新ジャンル「性（キス・SEXなど）」は運営者風で提案してよい',
     '- 各トピックに簡潔な構成骨子も含める',
     '- 必ずJSON形式のみで返答してください。JSON以外の説明文、前置き、後書きは一切含めないでください。',
     '',
-    '【学習教材】',
+    '【絶対に守ること：マンネリ防止】',
+    '- 下記の「直近に提案したトピック一覧」と、タイトル・切り口・構成パターンが似ているものは絶対に提案しないこと',
+    '- 特に「余裕」「安心感」「テクニックより〇〇」「義務感」「既読スルー」という結論に逃げがちなので、今回はこれらの結論パターンを使わないこと',
+    '- 各ジャンルの使用回数（下記）を見て、使用回数が少ないジャンルを優先的に選ぶこと',
+    '',
+    '【直近に提案したトピック一覧（新しい順）】',
+    historyText,
+    '',
+    '【ジャンル別・使用回数】',
+    genreCountsText,
+    '',
+    '【学習教材（文体・構成の参考。内容そのものを真似しない）】',
     learningArticles
   ].join('\n');
 
@@ -33,9 +106,9 @@ async function generateTopicPool() {
     '',
     '【要件】',
     '- トピック数：3-4本',
-    '- ジャンル：会話、身だしなみ、LINE、実話、性（キス・SEXなど）から選択',
+    '- ジャンル：会話、身だしなみ、LINE、実話、性（キス・SEXなど）から選択。直近の履歴を踏まえてバランスよく',
     '- 各トピックに：',
-    '  * タイトル',
+    '  * タイトル（直近の履歴と似た言い回し・結論にしないこと）',
     '  * 簡潔な構成（見出し3-4個）',
     '  * 推奨文体（運営者風/舞香風/百足風）',
     '  * 短い説明',
@@ -63,6 +136,7 @@ async function generateTopicPool() {
       {
         model: 'claude-sonnet-5',
         max_tokens: 2000,
+        temperature: 1,
         system: systemPrompt,
         messages: [
           {
@@ -100,7 +174,7 @@ async function generateTopicPool() {
       throw new Error('JSON not found in Claude response');
     }
 
-    return JSON.parse(jsonMatch[0]);
+    return { topicData: JSON.parse(jsonMatch[0]), history: history };
   } catch (error) {
     console.error('Claude API error:', error.message);
     if (error.response) {
@@ -144,7 +218,6 @@ function formatTopicsForLine(topicData) {
   return messages;
 }
 
-// ブロードキャスト配信：このBotの友だち全員に送信（個人用なので実質KOIさんだけに届く）
 async function sendToLine(messages) {
   try {
     for (const msg of messages) {
@@ -186,7 +259,9 @@ async function main() {
     console.log('🚀 Starting weekly topic generation...');
 
     console.log('📝 Generating topics with Claude...');
-    const topicData = await generateTopicPool();
+    const result = await generateTopicPool();
+    const topicData = result.topicData;
+    const history = result.history;
 
     console.log('📋 Formatting messages for LINE...');
     const lineMessages = formatTopicsForLine(topicData);
@@ -194,7 +269,11 @@ async function main() {
     console.log('📤 Sending to LINE...');
     await sendToLine(lineMessages);
 
-    const logPath = path.join(process.cwd(), 'logs', 'topic-pool-' + new Date().toISOString().split('T')[0] + '.json');
+    console.log('💾 Saving topic history...');
+    const weekLabel = new Date().toISOString().split('T')[0];
+    saveTopicHistory(history, topicData.topics, weekLabel);
+
+    const logPath = path.join(process.cwd(), 'logs', 'topic-pool-' + weekLabel + '.json');
     fs.mkdirSync(path.dirname(logPath), { recursive: true });
     fs.writeFileSync(logPath, JSON.stringify(topicData, null, 2));
 
